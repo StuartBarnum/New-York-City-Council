@@ -1,0 +1,16 @@
+---
+title: "initial exploration"
+author: "Stuart Barnum"
+date: "8/29/2022"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(tidyverse, sf)
+
+```
