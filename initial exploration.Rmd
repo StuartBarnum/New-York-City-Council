@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 library(lubridate)
+library(funtimes)
 
 historic <- read_csv("NYPD_Arrests_Data__Historic.csv",
                      guess_max = Inf)
@@ -25,30 +26,129 @@ summary(historic_w_date)
 year_to_date <- read_csv("NYPD_Arrest_Data__Year_to_Date_.csv") %>%
   mutate(Date = as.Date(ARREST_DATE, "%m/%d/%Y"))
 
+all_arrests <- bind_rows(historic_w_date, year_to_date)
+
+summary(all_arrests)
+
 ```
+
+Have a quick look at counts for 30 day periods for the entire period from 2006. I use the entire period, for now, to perhaps uncover cyclical affects (e.g. over each year) that may be distorted by COVID.
+
+```{r}
+ggplot(all_arrests) + geom_histogram(aes(Date), binwidth=30) +
+  labs(y = "Number of arrests", title="Count totals from 2006 by 30-day periods") +
+  theme_bw()
+```
+
+Find arrest counts for each day, to facilitate modeling. Have a quick look, noting that that the seeming cyclical effects, though somewhat evident for earlier years, are now more difficult to discern.
 
 ```{r}
 
-#Noting that the column names don'e seem to match, I grab the arrest date data #for the first Question of the exercise
-arrest_dates <- tibble(Date = c(historic_w_date$Date, year_to_date$Date)) %>%
-  filter(Date >= mdy("01-01-18"))
-
-#have a very quick look
-ggplot(arrest_dates) + geom_histogram(aes(Date))
-
-#obtain counts for the dates to allow a closer look and perhaps attempt to separate season effects from any trend (and from random variation or other factors)
 arrest_day_counts <- 
-  arrest_dates %>%
+  all_arrests %>%
   group_by(Date) %>%
   summarize(daily_arrest_count = n())
-
-plot(arrest_day_counts)
 
 #plot the daily counts together with a loess-smoothed curve
 ggplot(arrest_day_counts, aes(x=Date, y = daily_arrest_count)) +
   geom_smooth() + geom_point(alpha = .15)+
-  theme_bw()
+  theme_bw() 
+```
+
+I might expect to see differences in week days, with e.g. more arrests of certain types on weekends.  I will bin the weeks, obtaining the count for each week. Assign these counts to the median day of the week. This will also facilitate satisfaction (or approximate satisfaction) of the regression assumptions if I do simple regression to address Question 1.
+
+```{r}
+
+week_counts <- all_arrests %>%
+  mutate(week_floor = floor_date(Date, unit="weeks"),
+         week_median_date = week_floor + 3) %>%
+  group_by(week_median_date) %>%
+  summarize(week_count = n()) 
+
+ggplot(week_counts, aes(week_median_date, week_count)) +
+  geom_point(alpha = .25) +
+  geom_smooth(method = "loess", span = .1) +
+  scale_x_date(breaks = '1 year') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Weekly counts from 2006, with smoothing showing seasonal\n variation in earlier years")
+
+week_counts_fm_2018 <- week_counts %>%
+  filter(week_median_date >= ymd("2018-01-01"))
+
+ggplot(week_counts_fm_2018, aes(week_median_date, week_count)) +
+  geom_point(alpha = .3) +
+  geom_smooth(method = "loess", span = .15) +
+  theme_bw() +
+  scale_x_date(breaks = '1 year') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Weekly counts from 2018, with smoothing showing seasonal\n variation, perhaps distorted due to COVID and other aspects")
+
+```
+It appears that arrests  decreased until the middle of 2020 and then started to increase. I will divide the data into these two time periods and apply a Mann-Kendall test with sieve bootstrap two the two results time series. This test allows that data be autocorrelated and that there be periodicity, which seems to exist, even if it is rather irregular.
+
+As a first step, I put the relevant data into a time series R object and create a quick plot of the results
+
+```{r}
+
+#these two results might be used with daily counts
+first_obs <- week_counts_fm_2018 %>%
+  filter(week_median_date==min(week_median_date))
+last_obs <- week_counts_fm_2018 %>%
+  filter(week_median_date==max(week_median_date))
+
+#the times series object for weekly counts
+timeseries_both <- ts(week_counts_fm_2018$week_count,
+                 start = c(2018, 1),
+                 frequency = 52)
+plot(timeseries_both)
+
+timeseries_earlier <- window(timeseries_both,
+                 end = c(2020, 26))
+plot(timeseries_earlier)
+
+timeseries_later <- window(timeseries_both,
+                 start = c(2020, 26))
+plot(timeseries_later)
 
 ```
 
-Perhaps naively, I would expect to find seasonality with respect to the year (perhaps fewer arrests in the winter) and also some variation over 7 day weeks.
+Now do the statistical signficance tests on upward and downward trends for the respective time period
+
+```{r}
+
+notrend_test(timeseries_earlier, B=1000, test='MK')
+
+notrend_test(timeseries_later, B=1000, test='MK')
+
+```
+
+Moving on the Question 2, we count numbers of arrests by `pd_desc, and then subset the arrests dataset to list only the arrests within pd_desc categories with the top 5 counts. 
+
+```{r}
+
+pd_desc_counts_top5 <- all_arrests %>%
+  filter(Date >= ymd('2018-01-01')) %>%
+  count(PD_DESC) %>%
+  arrange(desc(n)) %>%
+  top_n(5)
+  
+print(pd_desc_counts_top5)  
+
+pd_desc_subset <- all_arrests %>%
+  filter(Date >= ymd('2018-01-01')) %>%
+  inner_join(pd_desc_counts_top5, by="PD_DESC")
+
+```
+
+
+
+
+
+
+```{r}
+
+
+
+
+
+```
