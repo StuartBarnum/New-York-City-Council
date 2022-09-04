@@ -11,6 +11,44 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 
-library(tidyverse, sf)
+library(tidyverse)
+library(lubridate)
+
+historic <- read_csv("NYPD_Arrests_Data__Historic.csv",
+                     guess_max = Inf)
+summary(historic)
   
+historic_w_date <- historic %>%
+  mutate(Date = as.Date(ARREST_DATE, "%m/%d/%Y"))
+summary(historic_w_date)
+
+year_to_date <- read_csv("NYPD_Arrest_Data__Year_to_Date_.csv") %>%
+  mutate(Date = as.Date(ARREST_DATE, "%m/%d/%Y"))
+
 ```
+
+```{r}
+
+#Noting that the column names don'e seem to match, I grab the arrest date data #for the first Question of the exercise
+arrest_dates <- tibble(Date = c(historic_w_date$Date, year_to_date$Date)) %>%
+  filter(Date >= mdy("01-01-18"))
+
+#have a very quick look
+ggplot(arrest_dates) + geom_histogram(aes(Date))
+
+#obtain counts for the dates to allow a closer look and perhaps attempt to separate season effects from any trend (and from random variation or other factors)
+arrest_day_counts <- 
+  arrest_dates %>%
+  group_by(Date) %>%
+  summarize(daily_arrest_count = n())
+
+plot(arrest_day_counts)
+
+#plot the daily counts together with a loess-smoothed curve
+ggplot(arrest_day_counts, aes(x=Date, y = daily_arrest_count)) +
+  geom_smooth() + geom_point(alpha = .15)+
+  theme_bw()
+
+```
+
+Perhaps naively, I would expect to find seasonality with respect to the year (perhaps fewer arrests in the winter) and also some variation over 7 day weeks.
