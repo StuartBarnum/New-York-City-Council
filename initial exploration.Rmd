@@ -140,17 +140,130 @@ pd_desc_subset <- all_arrests %>%
   filter(Date >= ymd('2018-01-01')) %>%
   inner_join(pd_desc_counts_top5, by="PD_DESC")
 
+pd_desc_counts <- pd_desc_subset %>%
+  mutate(week_floor = floor_date(Date, unit="weeks"),
+         week_median_date = week_floor + 3) %>%
+  group_by(PD_DESC, week_median_date) %>%
+  summarize(week_count = n()) 
+
 ```
 
-
-
-
-
+Visualizing the apparent trend, we for the 5 categories with the highest count, we a similar count as with the older counts. Note thought that two o the categories do not have counts until the start of 2019.
 
 ```{r}
 
+ggplot(pd_desc_counts, aes(x=week_median_date, y=week_count, color=PD_DESC)) +
+  geom_point(alpha = .25) +
+  geom_smooth(method = "loess", span = .2) +
+  scale_x_date(breaks = '1 year') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Top 5 categories from 2018, with smoothing showing trends\n similar to the overall arrest trend")
+ 
+```
+Put the counts for the 5 categories into separate variables.
 
+```{r}
 
+top5wide <- pd_desc_counts %>%
+  pivot_wider(names_from = PD_DESC,
+              values_from = week_count)
+  
+top5wide %>% head()
+
+for (i in 2:6){
+  
+  print(str_c("Column ", i))
+  
+  ts <- ts(top5wide[,i],
+             start = c(2018, 1),
+             frequency = 52)
+  
+  if (i %in% 4:5) {
+    ts_early <- window(ts,
+                   start = c(2019, 1),
+                   end = c(2020, 26))
+  } else {
+    ts_early <- window(ts,
+                   end = c(2020, 26))
+  }
+  
+  print("Earlier Period")
+  print(notrend_test(ts_early, B=1000, test='MK'))
+  
+  print("Later Period")
+  ts_late <- window(ts, 
+                    start = c(2020, 26))
+  print(notrend_test(ts_late, B=1000, test='MK'))
+}
+
+```
+
+Turn to question 3 about the precincts
+
+```{r}
+
+precinct_counts <- all_arrests %>%
+  filter(ARREST_PRECINCT %in% c(19, 73)) %>%
+  mutate(precinct = case_when(ARREST_PRECINCT == 19 ~ "Upper East Side",
+                              ARREST_PRECINCT == 73 ~ "Brownsville")) %>%
+  mutate(week_floor = floor_date(Date, unit="weeks"),
+         week_median_date = week_floor + 3) %>%
+  group_by(precinct, week_median_date) %>%
+  summarize(week_count = n()) 
+
+ggplot(precinct_counts, aes(x=week_median_date, y=week_count, color=precinct)) +
+  geom_point(alpha = .25) +
+  geom_smooth(method = "loess", span = .2) +
+  scale_x_date(breaks = '1 year') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Two precinct from 2006, with smoothing showing trends\n similar to the overall arrest trend")
+
+precinct_counts_fm_2018 <- precinct_counts %>%
+  filter(week_median_date >= ymd("2018-01-01"))
+
+ggplot(precinct_counts_fm_2018, aes(x=week_median_date, y=week_count, color=precinct)) +
+  geom_point(alpha = .25) +
+  geom_smooth(method = "loess", span = .2) +
+  scale_x_date(breaks = '1 year') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Two precinct from 2018, with smoothing showing trends\n similar to the overall arrest trend")
 
 
 ```
+
+```{r}
+
+precinct_wide <- precinct_counts_fm_2018 %>%
+  pivot_wider(names_from = precinct,
+              values_from = week_count)
+  
+precinct_wide %>% head()
+
+for (i in 2:3){
+  
+  print(str_c("Column ", i))
+  
+  ts <- ts(precinct_wide[,i],
+             start = c(2018, 1),
+             frequency = 52)
+  
+  if (i %in% 4:5) {
+    ts_early <- window(ts,
+                   start = c(2019, 1),
+                   end = c(2020, 26))
+  } else {
+    ts_early <- window(ts,
+                   end = c(2020, 26))
+  }
+  
+  print("Earlier Period")
+  print(notrend_test(ts_early, B=1000, test='MK'))
+  
+  print("Later Period")
+  ts_late <- window(ts, 
+                    start = c(2020, 26))
+  print(notrend_test(ts_late, B=1000, test='MK'))
+}
+
+```
+
