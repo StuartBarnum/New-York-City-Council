@@ -5,4 +5,4 @@ https://github.com/StuartBarnum/New-York-City-Council/blob/main/detailed_analysi
 
 Answers in the requested format:
 
-
+https://github.com/StuartBarnum/New-York-City-Council/blob/main/report.pdf
