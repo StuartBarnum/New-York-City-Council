@@ -141,6 +141,8 @@ notrend_test(timeseries_later, B=1000, test='MK')
 
 Moving on the Question 2, we count numbers of arrests by `pd_desc for all weeks since 2018, and then subset the arrests dataset to list only the arrests within pd_desc categories with the top 5 counts. 
 
+<br>
+
 ```{r, include=TRUE, echo=FALSE, warning=FALSE, message=FALSE}
 
 pd_desc_counts_top5 <- all_arrests %>%
@@ -163,10 +165,12 @@ pd_desc_counts <- pd_desc_subset %>%
 
 ```
 
-Visualizing the apparent trend, for the 5 categories with the highest count, we se similar trends as with the overall counts--decreasing until about middle 2020 and then increasing. Except that at least one of the crime categories shows week trends or perhaps no statistically significant trend at all. We check the statistical significance using the same test as with Question 1. Note that two of the categories show no 2018 data. These may be new or renamed categories (I have not explored this).
+<br>
+
+Visualizing the apparent trend, for the 5 categories with the highest count, we tend to see similar trends as with the overall counts--decreasing until about middle 2020 and then increasing. Except that at least one of the crime categories shows week trends or perhaps no statistically significant trend at all. We check the statistical significance using the same test as with Question 1. Note that two of the categories show no 2018 data. These may be new or renamed categories (I have not explored this).
 
 
-```{r}
+```{r, include=TRUE, echo=FALSE, warning=FALSE, message=FALSE}
 
 ggplot(pd_desc_counts, aes(x=week_median_date, y=week_count, color=PD_DESC)) +
   geom_point(alpha = .25) +
@@ -179,7 +183,7 @@ ggplot(pd_desc_counts, aes(x=week_median_date, y=week_count, color=PD_DESC)) +
       y = "Number of arrests")
  
 ```
-Put the counts for the 5 categories into separate variables and then do the statistical tests for the downward trend before mid 2020 and the upward trend after mid 2020
+Assault 3 and Larceny show strong decreases before middle 2020, while robbery shows little decrease over this period. All five of the crime categores show moderate increases after middle 2020.
 
 ```{r}
 
