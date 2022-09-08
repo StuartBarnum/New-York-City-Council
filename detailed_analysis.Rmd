@@ -1,0 +1,424 @@
+---
+title: "Detailed Analysis"
+author: "Stuart Barnum"
+date: "7/9/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(tidyverse)
+library(lubridate)
+library(funtimes)
+library(boot)
+
+historic <- read_csv("NYPD_Arrests_Data__Historic.csv",
+                     guess_max = Inf)
+summary(historic)
+  
+historic_w_date <- historic %>%
+  mutate(Date = as.Date(ARREST_DATE, "%m/%d/%Y"))
+summary(historic_w_date)
+
+year_to_date <- read_csv("NYPD_Arrest_Data__Year_to_Date_.csv") %>%
+  mutate(Date = as.Date(ARREST_DATE, "%m/%d/%Y"))
+
+all_arrests <- bind_rows(historic_w_date, year_to_date)
+
+summary(all_arrests)
+
+```
+
+# Question 1
+## Has the arrest rate been decreasing from 2018-2022? Describe the trend and
+defend any statistical tests used to support this conclusion.
+
+The arrest record has not decreased from 2018. It decreased from 2018 through mid 2020 and then increased thereafter.
+
+I begin by having quick look at counts for 30 day periods for the entire period from 2006. I use all of the years, for now, to perhaps uncover cyclical affects (e.g. over each year) that may be distorted by COVID.
+
+```{r}
+ggplot(all_arrests) + geom_histogram(aes(Date), binwidth=30) +
+  labs(y = "Number of arrests", title="Count totals from 2006 by 30-day periods") +
+  theme_bw()
+```
+
+Find arrest counts for each day, to facilitate possible modeling (in the end, I used counts by week in my analysis). Have a quick look, noting that that the seeming cyclical effects, though somewhat evident for earlier years, are now more difficult to discern.
+
+```{r}
+
+arrest_day_counts <- 
+  all_arrests %>%
+  group_by(Date) %>%
+  summarize(daily_arrest_count = n())
+
+#plot the daily counts together with a loess-smoothed curve
+ggplot(arrest_day_counts, aes(x=Date, y = daily_arrest_count)) +
+  geom_smooth(span = .2) + geom_point(alpha = .15)+
+  theme_bw() 
+```
+
+I might expect to see differences in week days, with e.g. more arrests of certain types on weekends.  I will bin the weeks, obtaining the count for each week and assigning these counts to the median day of the week (Wednesday). With this, we might better visualize trends over time periods greater than a few weeks. 
+
+```{r}
+
+week_counts <- all_arrests %>%
+  mutate(week_floor = floor_date(Date, unit="weeks"),
+         week_median_date = week_floor + 3) %>%
+  group_by(week_median_date) %>%
+  summarize(week_count = n()) 
+
+ggplot(week_counts, aes(week_median_date, week_count)) +
+  geom_point(alpha = .25) +
+  geom_smooth(method = "loess", span = .1) +
+  scale_x_date(breaks = '1 year') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Weekly counts from 2006, with smoothing showing seasonal\n variation in earlier years")
+
+week_counts_fm_2018 <- week_counts %>%
+  filter(week_median_date >= ymd("2018-01-01"))
+
+ggplot(week_counts_fm_2018, aes(week_median_date, week_count)) +
+  geom_point(alpha = .3) +
+  geom_smooth(method = "loess", span = .15) +
+  theme_bw() +
+  scale_x_date(breaks = '1 year') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Weekly arrests from 2018, with smoothing showing seasonal\n variation, perhaps distorted due to COVID and other aspects", 
+       x = "Median week date (the Wednesday)",
+       y = "Weekly number of arrests")
+
+```
+It appears that arrests  decreased until the middle of 2020 and then started to increase. I will divide the data into these two time periods and apply a Mann-Kendall test with sieve bootstrap to the two time series resulting from separation of weeks before middle 2020 and weeks after middle 2020. This test allows that data be autocorrelated and that there be periodicity, which seems to exist, even if it is rather irregular.
+
+As a first step, I put the relevant data into a time series R object and create a quick plot of the results
+
+```{r}
+
+#these two results might be used with daily counts
+first_obs <- week_counts_fm_2018 %>%
+  filter(week_median_date==min(week_median_date))
+last_obs <- week_counts_fm_2018 %>%
+  filter(week_median_date==max(week_median_date))
+
+#the times series object for weekly counts
+timeseries_both <- ts(week_counts_fm_2018$week_count,
+                 start = c(2018, 1),
+                 frequency = 52)
+plot(timeseries_both)
+
+timeseries_earlier <- window(timeseries_both,
+                 end = c(2020, 26))
+plot(timeseries_earlier)
+
+timeseries_later <- window(timeseries_both,
+                 start = c(2020, 26))
+plot(timeseries_later)
+
+```
+
+Now do the statistical signficance tests on upward and downward trends for the respective time period. The test is for no trend (the null hypothesis versus some trend)
+
+```{r}
+
+notrend_test(timeseries_earlier, B=1000, test='MK')
+
+notrend_test(timeseries_later, B=1000, test='MK')
+
+```
+
+# Question 2
+## What are the top 5 most frequent arrests as described in the column 'pd_desc'in 2018-2022? Compare & describe the overall trends of these arrests  across time.
+
+Moving on the Question 2, we count numbers of arrests by `pd_desc for all weeks since 2018, and then subset the arrests dataset to list only the arrests within pd_desc categories with the top 5 counts. 
+
+```{r}
+
+pd_desc_counts_top5 <- all_arrests %>%
+  filter(Date >= ymd('2018-01-01')) %>%
+  count(PD_DESC) %>%
+  arrange(desc(n)) %>%
+  top_n(5)
+  
+print(pd_desc_counts_top5)  
+
+pd_desc_subset <- all_arrests %>%
+  filter(Date >= ymd('2018-01-01')) %>%
+  inner_join(pd_desc_counts_top5, by="PD_DESC")
+
+pd_desc_counts <- pd_desc_subset %>%
+  mutate(week_floor = floor_date(Date, unit="weeks"),
+         week_median_date = week_floor + 3) %>%
+  group_by(PD_DESC, week_median_date) %>%
+  summarize(week_count = n()) 
+
+```
+
+Visualizing the apparent trend, for the 5 categories with the highest count, we se similar trends as with the overall counts--decreasing until about middle 2020 and then increasing. Except that at least one of the crime categories shows week trends or perhaps no statistically significant trend at all. We check the statistical significance using the same test as with Question 1. Note that two of the categories show no 2018 data. These may be new or renamed categories (I have not explored this).
+
+
+```{r}
+
+ggplot(pd_desc_counts, aes(x=week_median_date, y=week_count, color=PD_DESC)) +
+  geom_point(alpha = .25) +
+  geom_smooth(method = "loess", span = .2) +
+  theme_bw() +
+  scale_x_date(breaks = '1 year') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Top 5 crime categories from 2018, with smoothing\n showing trends similar to the overall arrest trend",
+      x = "Median date of week",
+      y = "Number of arrests")
+ 
+```
+Put the counts for the 5 categories into separate variables and then do the statistical tests for the downward trend before mid 2020 and the upward trend after mid 2020
+
+```{r}
+
+top5wide <- pd_desc_counts %>%
+  pivot_wider(names_from = PD_DESC,
+              values_from = week_count)
+  
+top5wide %>% head()
+
+for (i in 2:6){
+  
+  print(str_c("Column ", i))
+  
+  ts <- ts(top5wide[,i],
+             start = c(2018, 1),
+             frequency = 52)
+  
+  if (i %in% 4:5) {
+    ts_early <- window(ts,
+                   start = c(2019, 1),
+                   end = c(2020, 26))
+  } else {
+    ts_early <- window(ts,
+                   end = c(2020, 26))
+  }
+  
+  print("Earlier Period")
+  print(notrend_test(ts_early, B=1000, test='MK'))
+  
+  print("Later Period")
+  ts_late <- window(ts, 
+                    start = c(2020, 26))
+  print(notrend_test(ts_late, B=1000, test='MK'))
+}
+
+```
+
+# Question 3
+## If we think of arrests as a sample of total crime, is there more crime inprecinct 19 (Upper East Side) than precinct 73 (Brownsville)? Describe the trend, variability and justify any statistical tests used to support this conclusion.
+
+This question asks us to compare crime rates, not just trends in crime rates. It can be misleading to say that one area has more crime than another area, without consideration of the population of those areas. I therefore found some population numbers and compared the per capital crime rates. 
+
+My sources:
+
+https://johnkeefe.net/nyc-police-precinct-and-census-data
+
+https://github.com/jkeefe/census-by-precincts/blob/master/data/nyc/DECENNIALPL2020.P1_metadata_2022-02-06T162722.csv
+
+Another tricky aspect with Question 3 is the seeming autocorrelation (over time) in the weekly crime rates. Most statistical tests that would compare, say, the average weekly crime rates of these areas require independenc of the data points. This condition fails. I use bootstrapping to partially ameliorate this issue. I a not certain that my solution is ideal. 
+ 
+```{r}
+
+precinct_counts <- all_arrests %>%
+  filter(ARREST_PRECINCT %in% c(19, 73)) %>%
+  mutate(precinct = case_when(ARREST_PRECINCT == 19 ~ "Upper East Side",
+                              ARREST_PRECINCT == 73 ~ "Brownsville")) %>%
+  mutate(week_floor = floor_date(Date, unit="weeks"),
+         week_median_date = week_floor + 3) %>%
+  group_by(precinct, week_median_date) %>%
+  summarize(week_count = n()) 
+
+ggplot(precinct_counts, aes(x=week_median_date, y=week_count, color=precinct)) +
+  geom_point(alpha = .25) +
+  geom_smooth(method = "loess", span = .2) +
+  scale_x_date(breaks = '1 year') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Two precinct from 2006, with smoothing showing trends\n similar to the overall arrest trend")
+
+precinct_counts_fm_2018 <- precinct_counts %>%
+  filter(week_median_date >= ymd("2018-01-01"))
+
+ggplot(precinct_counts_fm_2018, aes(x=week_median_date, y=week_count, color=precinct)) +
+  geom_point(alpha = .25) +
+  geom_smooth(method = "loess", span = .2) +
+  theme_bw() +
+  scale_x_date(breaks = '1 year') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Two precincts from 2018, with smoothing showing trends\n similar to the overall arrest trend", 
+       x = "Median date of week",
+       y = "Number of arrests")
+
+
+```
+
+```{r}
+
+precinct_wide <- precinct_counts_fm_2018 %>%
+  pivot_wider(names_from = precinct,
+              values_from = week_count)
+  
+precinct_wide %>% head()
+
+for (i in 2:3){
+  
+  print(str_c("Column ", i))
+  
+  ts <- ts(precinct_wide[,i],
+             start = c(2018, 1),
+             frequency = 52)
+  
+  ts_early <- window(ts,
+               end = c(2020, 26))
+  
+  print("Earlier Period")
+  print(notrend_test(ts_early, B=1000, test='MK'))
+  
+  print("Later Period")
+  ts_late <- window(ts, 
+                    start = c(2020, 26))
+  print(notrend_test(ts_late, B=1000, test='MK'))
+}
+
+```
+
+
+
+```{r}
+
+john_keefe_data = read_csv("nyc_precinct_2020pop (1).txt")
+
+```
+
+Look at the arrests per capita for the two precincts. From the Keefe data, per the 2020 cencus, Precinct 19 has population 220,261, while Precinct 73 has population 98,506. I will assume that these numbers are roughly accurate from 2018 to the present.
+
+```{r}
+
+summary(precinct_wide)
+
+#arrests per capita as PERCENT
+precinct_wide_adjusted <- precinct_wide %>%
+  mutate(`Upper East Side per capita` = 100*`Upper East Side` / 220261,
+         `Brownsville per capita` = 100 * Brownsville / 98506)
+
+#make long to facilitate visualization with ggplot
+precinct_long_adusted <- precinct_wide_adjusted %>%
+  pivot_longer(cols = c(`Upper East Side per capita`, 
+                         `Brownsville per capita`),
+               names_to = "Precinct",
+               values_to = "Arrests per capita")
+
+
+precinct_long_adusted %>% head()
+
+ggplot(precinct_long_adusted, aes(x=week_median_date, y=`Arrests per capita`, color=Precinct)) +
+  geom_point(alpha = .25) +
+  geom_smooth(method = "loess", span = .2) +
+  theme_bw() +
+  scale_x_date(breaks = '1 year') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Arrests per capita for two precincts",
+       x = "Median date of week",
+       y = "Arrests per capita (%)") +
+  scale_color_discrete(labels = c("Brownsville", "Upper East Side"))
+
+```
+
+Some analysis of the differences between the per capita arrest rates
+
+```{r}
+
+percapita_difference <- precinct_wide_adjusted %>%
+  mutate(difference = `Brownsville per capita` -
+           `Upper East Side per capita`)
+
+ggplot(percapita_difference, aes(x=week_median_date, y=difference)) +
+  geom_point(alpha = .25) +
+  geom_smooth(method = "loess", span = .2) +
+  theme_bw() +
+  scale_x_date(breaks = '1 year') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Difference in weekly arrests per capita",
+       subtitle = "Brownsville and Upper East Side",
+       x = "Median date of week",
+       y = "Arrests per capita difference (% points)") +
+  scale_color_discrete(labels = c("Brownsville", "Upper East Side"))
+
+```
+
+As with my previous analysis, there are notable differences between the time period before mid 2020 and the period after mid 2020. I will separate the data as before and then look for both trends and for overall differences between the precincts. The analysis of the overall differences, such as whether the differences in weekly arrest rates, between the two precincts, is statistically significant is complicated by the fact that the observations for each week are not independent. Most statistical tests, including non-parametric tests, assume independence. I ameliorate this issue by using bootstrap methods---resampling data to be used in statistical tests. All of my analysis will use population-adjusted arrest rates and will focus on the differences between the two precincts.
+
+The trend analysis, again using sieve bootstrap.
+
+```{r}
+# analyze the earlier and later bits within R timeseries objects
+
+ts <- ts(percapita_difference$difference,
+             start = c(2018, 1),
+             frequency = 52)
+  
+ts_early <- window(ts,
+             end = c(2020, 26))
+  
+print("Earlier Period")
+plot(ts_early)
+print(notrend_test(ts_early, B=1000, test='MK'))
+  
+print("Later Period")
+ts_late <- window(ts, 
+                    start = c(2020, 26))
+plot(ts_late, main="Difference in weekly per capita arrest rate",
+     xlab = "Midpoint of week", ylab="Percentage point difference")
+print(notrend_test(ts_late, B=1000, test='MK'))
+
+```
+
+We now look at the overall difference in the per capita arrest rates between the precincts, examining whether the differences in the weekly means are statistically significant. 
+
+```{r}
+
+early_differences <- percapita_difference[percapita_difference$week_median_date < ymd('2020-07-01'),]
+
+early_differences %>% head()
+
+fc <- function(d, i){
+	d2 <- d[i,]
+	return(mean(d2$difference))
+}
+
+bootmean_early <- boot(early_differences, fc, R=1000)
+boot.ci(bootmean_early, type = c('perc', 'bca'))
+
+later_differences <- percapita_difference[percapita_difference$week_median_date >= ymd('2020-07-01'),]
+
+later_differences %>% head()
+
+bootmean_later <- boot(later_differences, fc, R=1000)
+boot.ci(bootmean_later, type = c('perc', 'bca'))
+
+
+```
+
+# Question 4
+
+## Given the available data, what model would you build to predict crime to better allocate NYPD resources? 
+
+I would try a cluster analysis, or a number of cluster analyses, using as independent variables geographic coordinates, ($x$, $y$) pairs indicating specific points in the city, together with variables such as time of day, day of the week, the month, type of crime or zoning status (e.g. residential), etc. The type of model could be a simple k-means analysis or (preferably) a mixture model, with statistical distributions assigned to the clusters (the task of the model fit is to estimate the parameters of these distributions). Either type of model (k-means or mixture model) may produce centers where crimes and arrests of certain types tend to be concentrated. These centers in n-dimensional space, e.g. in  3 dimensions with the $x$ and $y$ coordinates and time since the start of the week. It might be useful to create separate models for certain, different, crime categories.
+
+In a mixture model, the value of the dependent variable we are predicting (e.g a $y$ on the left-hand side of the model equation) would be the value of the probability distribution function (for the probability of, say, an arrest). However, in addition to independent variables that have values in the data (e.g. the geographic coordinates), a model such as this will have latent traits or variables such as the cluster centers or the variances of the clusters. Variables or traits of particular interest will include (e.g.) cluster centers and (for mixture models) other parameters describing the clusters (e.g. variance of a normal distribution). In a similar fashion, in k-means clustering, the cluster centers will be of particular interest
+
+A model such this might enhance efficient placement of police resources in certain locations at certain times, based on the properties of the clusters this model might discern. It might also, depending on the data that is used, allow allocation of police officers with certain specialties (with focus on certainly types of crimes).
+
+As for model evaluation, the AIC or BIC criteria could be used to select one model over another. However, these measures will not tell us whether the final result is a good one (only that it is the best among possibly poorly-performing models). Cross validation could also be used for selecting one model over another. Two ways of evaluating a final model would be validation with data that is held out (a test set) or building a simulated dataset using the model. The actual data distributions and the simulated data distributions might then be compared using QQ plots (quantiles of one distribution plotted against quantiles of the other).
+
+Challenges I might face include lack of direct access to what we want to measure. For example, we may know the arrest rate and need to use the arrest rate as proxy for the crime rate. The arrest rates might somewhat reflect greater amounts of policing in certain areas rather than greater amounts of crimes in those areas. Further analysis might be required to disentangle numbers of arrests due to actual crime numbers and numbers or arrests due to greater presence of policing. Another challenge, as always with large amounts of data and sophisticated models, will be limitations on computing resources.
+
