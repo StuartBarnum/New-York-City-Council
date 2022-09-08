@@ -1,6 +1,8 @@
-# New-York-City-Council
+# Excercises for the New York City Council
 
-Exercise for New York City Council
-
+Exploratory analysis:
 https://github.com/StuartBarnum/New-York-City-Council/blob/main/detailed_analysis.pdf
+
+Answers in the requested format:
+
 
