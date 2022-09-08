@@ -41,8 +41,6 @@ summary(all_arrests)
 
 The arrest record has not decreased from 2018. It decreased from 2018 through mid 2020 and then increased thereafter.
 
-I begin by having quick look at counts for 30 day periods for the entire period from 2006. I use all of the years, for now, to perhaps uncover cyclical affects (e.g. over each year) that may be distorted by COVID.
-
 ```{r,  include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
 ggplot(all_arrests) + geom_histogram(aes(Date), binwidth=30) +
   labs(y = "Number of arrests", title="Count totals from 2006 by 30-day periods") +
@@ -62,7 +60,7 @@ ggplot(arrest_day_counts, aes(x=Date, y = daily_arrest_count)) +
   theme_bw() 
 ```
 
-We might expect to see differences between week days, with e.g. more arrests of certain types on weekends.  I will bin the weeks, obtaining the count for each week and assigning these counts to the median day of the week (Wednesday). With this, we might better visualize trends over time periods greater than a few weeks: 
+We might expect to see differences between week days, with e.g. more arrests of certain types on weekends.  I will bin the weeks, obtaining the count for each week and assigning these counts to the median day of the week (Wednesday). With this, we might better visualize trends over time periods greater than a few weeks. Note in the graphics the cyclical variation before 2015, which disipates after that.
 
 ```{r,  include=TRUE, echo=FALSE, warning=FALSE, message=FALSE}
 
@@ -77,8 +75,10 @@ ggplot(week_counts, aes(week_median_date, week_count)) +
   geom_smooth(method = "loess", span = .1) +
   theme_bw() +
   scale_x_date(breaks = '1 year') +
-  theme(axis.text.x = element_text(angle = 90)) +
-  labs(title = "Weekly counts from 2006, with smoothing showing seasonal\n variation in earlier years")
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Weekly counts from 2006, with smoothing showing seasonal\n variation in earlier years",
+       x = "Median week date (the Wednesday)",
+       y = "Weekly number of arrests")
 
 week_counts_fm_2018 <- week_counts %>%
   filter(week_median_date >= ymd("2018-01-01"))
@@ -88,13 +88,13 @@ ggplot(week_counts_fm_2018, aes(week_median_date, week_count)) +
   geom_smooth(method = "loess", span = .15) +
   theme_bw() +
   scale_x_date(breaks = '1 year') +
-  theme(axis.text.x = element_text(angle = 90)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Weekly arrests from 2018, with smoothing showing seasonal\n variation, perhaps distorted due to COVID and other aspects", 
        x = "Median week date (the Wednesday)",
        y = "Weekly number of arrests")
 
 ```
-It appears that arrests  decreased until the middle of 2020 and then started to increase. I will divide the data into these two time periods and apply a Mann-Kendall test with sieve bootstrap to the two time-series resulting from separation of weeks before middle 2020 from weeks after middle 2020. This test allows that data be autocorrelated and that there be periodicity, which seems to exist, even if it is rather irregular. I bootstrap methods for statistical tests throughout this report. 
+It appears that arrests  decreased until the middle of 2020 and then started to increase. I will divide the data into these two time periods and apply a Mann-Kendall test with sieve bootstrap to the two time-series resulting from separation of weeks before middle 2020 from weeks after middle 2020. This test allows that data be autocorrelated and that there be periodicity, which seems to exist, even if it is rather irregular. I will use this statistical test repeatedly, and then use a simple bootstrap approach at the end.
 
 The following two plots show the results of the separation of the two time periods
 
@@ -121,12 +121,9 @@ timeseries_later <- window(timeseries_both,
                  start = c(2020, 26))
 plot(timeseries_later, main = "Later period",
      ylab = "Weekly arrests", xlab = "Date")
-
-
-?plot
 ```
 
-With my statistical tests taking the null hypothesis of no trend, both of the trends---the downward trend before middle 2020 and the upward trend after middle 2020 are significant (P <  .01)
+With my statistical tests using the null hypothesis of no trend, both of the trends---the downward trend before middle 2020 and the upward trend after middle 2020 are significant (P <  .01).
 
 ```{r, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
 
@@ -137,11 +134,10 @@ notrend_test(timeseries_later, B=1000, test='MK')
 ```
 
 # Question 2
+
 ## What are the top 5 most frequent arrests as described in the column 'pd_desc'in 2018-2022? Compare & describe the overall trends of these arrests  across time.
 
-Moving on the Question 2, we count numbers of arrests by `pd_desc for all weeks since 2018, and then subset the arrests dataset to list only the arrests within pd_desc categories with the top 5 counts. 
-
-<br>
+The crime categories with the greatest numbers of arrests since 2018:
 
 ```{r, include=TRUE, echo=FALSE, warning=FALSE, message=FALSE}
 
@@ -167,7 +163,7 @@ pd_desc_counts <- pd_desc_subset %>%
 
 <br>
 
-Visualizing the apparent trend, for the 5 categories with the highest count, we tend to see similar trends as with the overall counts--decreasing until about middle 2020 and then increasing. Except that at least one of the crime categories shows week trends or perhaps no statistically significant trend at all. We check the statistical significance using the same test as with Question 1. Note that two of the categories show no 2018 data. These may be new or renamed categories (I have not explored this).
+For the 5 categories with the highest count, we tend to see similar trends as with the overall counts--decreasing until about middle 2020 and then increasing. Except that at least one of the crime categories shows weak trends or perhaps no statistically significant trend at all. We check the statistical significance using the same test as with Question 1. Note that two of the categories show no 2018 data. These may be new or renamed categories (I have not explored this).
 
 
 ```{r, include=TRUE, echo=FALSE, warning=FALSE, message=FALSE}
@@ -226,13 +222,13 @@ for (i in 2:6){
 
 This question asks us to compare crime rates, not just trends in crime rates. It can be misleading to say that one area has more crime than another area, without consideration of the population of those areas. I therefore found some population numbers and compared the per capital crime rates. 
 
-My sources:
+My sources for the population data:
 
 https://johnkeefe.net/nyc-police-precinct-and-census-data
 
 https://github.com/jkeefe/census-by-precincts/blob/master/data/nyc/DECENNIALPL2020.P1_metadata_2022-02-06T162722.csv
 
-Another tricky aspect with Question 3 is the seeming autocorrelation (over time) in the weekly crime rates. Most statistical tests that would compare, say, the average weekly crime rates of these areas require independenc of the data points. This condition fails. I use bootstrapping to partially ameliorate this issue. I am not certain that my solution is ideal. 
+Another tricky aspect with Question 3 is the seeming autocorrelation (over time) in the weekly crime rates. Most statistical tests that would compare, say, the average weekly crime rates of these areas, require independence of the data points. This condition fails here. I use a simple bootstrap to ameliorate this issue. I am not certain that my solution is ideal. 
  
 ```{r, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
 
@@ -345,7 +341,7 @@ ggplot(precinct_long_adusted, aes(x=week_median_date, y=`Arrests per capita`, co
 
 ```
 
-Altough Brownsville shows much sharper trends than the Upper East Side, downward and then upward, the both the trends for both show as statistically significant with null hypothesis of no trend (the  Mann-Kendall test with sieve bootstrap Mann-Kendall test with sieve bootstrap, again.) 
+Altough Brownsville shows much sharper trends than the Upper East Side, downward and then upward, the both the trends for both areas are statistically significant with null hypothesis of no trend (the  Mann-Kendall test with sieve bootstrap, again.) 
 
 I now look at the trend in the weekly differences between these two areas.
 
@@ -362,16 +358,16 @@ ggplot(percapita_difference, aes(x=week_median_date, y=difference)) +
   scale_x_date(breaks = '1 year') +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Difference in weekly arrests per capita",
-       subtitle = "Brownsville and Upper East Side",
+       subtitle = "Brownsville rate minus Upper East Side rate",
        x = "Median date of week",
        y = "Arrests per capita difference (% points)") +
   scale_color_discrete(labels = c("Brownsville", "Upper East Side"))
 
 ```
 
-The again see statistically significant differences in the trends in the *differences*, both downward and upward.
+We find  statistically significant trends in the *differences*, between the weekly arrest rates, downward and then upward (p<<.001).
 
-The analysis of the overall differences, such as whether the differences in weekly arrest rates, between the two precincts, is statistically significant is complicated by the fact that the observations for each week are not independent. Most statistical tests, including non-parametric tests, assume independence. I ameliorate this issue by using a simple bootstrap---resampling the data with replacement. We use, again, population-adjusted arest rates.
+The analysis of the overall differences, such as whether the differences in weekly arrest rates, between the two precincts, is statistically significant is complicated by the fact that the observations for each week are not independent. Most statistical tests, including non-parametric tests, assume independence. I ameliorate this issue by using a simple bootstrap---resampling the data with replacement. We use, again, population-adjusted arrest rates.
 
 
 ```{r, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
@@ -421,7 +417,7 @@ boot.ci(bootmean_later, type = c('perc', 'bca'))
 
 ```
 
-To quantify the overall differences between Brownsville and the Upper East side, I use confidence intervals. With bootstrap, the confidence interval of the difference for the period 2018 through middle 2020, in percentabe points (for the numbers of arrests per capita), is (0.066,  0.073), while the confidence interval for the later period is (0.038,  0.044) 
+To quantify the overall differences between Brownsville and the Upper East side, I use confidence intervals. With bootstrap, the confidence interval of the difference for the period 2018 through middle 2020, in percentage points (for the numbers of arrests per capita per week), is (0.066,  0.073), while the confidence interval for the later period is (0.038,  0.044) 
 
 # Question 4
 
