@@ -1,7 +1,7 @@
 ---
 title: "Exercise Answers"
 author: "Stuart Barnum"
-date: "7/9/2022"
+date: "9/7/2022"
 output:
   pdf_document: default
   html_document: default
@@ -36,8 +36,8 @@ summary(all_arrests)
 ```
 
 # Question 1
-## Has the arrest rate been decreasing from 2018-2022? Describe the trend and
-defend any statistical tests used to support this conclusion.
+
+## Has the arrest rate been decreasing from 2018-2022? Describe the trend and defend any statistical tests used to support this conclusion.
 
 The arrest record has not decreased from 2018. It decreased from 2018 through mid 2020 and then increased thereafter.
 
@@ -183,9 +183,9 @@ ggplot(pd_desc_counts, aes(x=week_median_date, y=week_count, color=PD_DESC)) +
       y = "Number of arrests")
  
 ```
-Assault 3 and Larceny show strong decreases before middle 2020, while robbery shows little decrease over this period. All five of the crime categores show moderate increases after middle 2020.
+Assault 3 and Larceny show strong decreases before middle 2020, while robbery shows little decrease over this period. All five of the crime categories show moderate increases after middle 2020. Statistical tests for all 5 categories over the two time periods (10 tests) support rejection of the null hypothesis of no trend (p = .05) in every case except for Robbery before middle 2020. 
 
-```{r}
+```{r, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
 
 top5wide <- pd_desc_counts %>%
   pivot_wider(names_from = PD_DESC,
@@ -232,9 +232,9 @@ https://johnkeefe.net/nyc-police-precinct-and-census-data
 
 https://github.com/jkeefe/census-by-precincts/blob/master/data/nyc/DECENNIALPL2020.P1_metadata_2022-02-06T162722.csv
 
-Another tricky aspect with Question 3 is the seeming autocorrelation (over time) in the weekly crime rates. Most statistical tests that would compare, say, the average weekly crime rates of these areas require independenc of the data points. This condition fails. I use bootstrapping to partially ameliorate this issue. I a not certain that my solution is ideal. 
+Another tricky aspect with Question 3 is the seeming autocorrelation (over time) in the weekly crime rates. Most statistical tests that would compare, say, the average weekly crime rates of these areas require independenc of the data points. This condition fails. I use bootstrapping to partially ameliorate this issue. I am not certain that my solution is ideal. 
  
-```{r}
+```{r, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
 
 precinct_counts <- all_arrests %>%
   filter(ARREST_PRECINCT %in% c(19, 73)) %>%
@@ -252,6 +252,10 @@ ggplot(precinct_counts, aes(x=week_median_date, y=week_count, color=precinct)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Two precinct from 2006, with smoothing showing trends\n similar to the overall arrest trend")
 
+```
+
+```{r, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
+
 precinct_counts_fm_2018 <- precinct_counts %>%
   filter(week_median_date >= ymd("2018-01-01"))
 
@@ -268,7 +272,8 @@ ggplot(precinct_counts_fm_2018, aes(x=week_median_date, y=week_count, color=prec
 
 ```
 
-```{r}
+
+```{r, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
 
 precinct_wide <- precinct_counts_fm_2018 %>%
   pivot_wider(names_from = precinct,
@@ -300,17 +305,17 @@ for (i in 2:3){
 
 
 
-```{r}
+```{r, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
 
-john_keefe_data = read_csv("nyc_precinct_2020pop (1).txt")
+#john_keefe_data = read_csv("nyc_precinct_2020pop (1).txt")
 
 ```
 
 Look at the arrests per capita for the two precincts. From the Keefe data, per the 2020 cencus, Precinct 19 has population 220,261, while Precinct 73 has population 98,506. I will assume that these numbers are roughly accurate from 2018 to the present.
 
-```{r}
+```{r, include=TRUE, echo=FALSE, warning=FALSE, message=FALSE}
 
-summary(precinct_wide)
+#summary(precinct_wide)
 
 #arrests per capita as PERCENT
 precinct_wide_adjusted <- precinct_wide %>%
@@ -325,7 +330,7 @@ precinct_long_adusted <- precinct_wide_adjusted %>%
                values_to = "Arrests per capita")
 
 
-precinct_long_adusted %>% head()
+#precinct_long_adusted %>% head()
 
 ggplot(precinct_long_adusted, aes(x=week_median_date, y=`Arrests per capita`, color=Precinct)) +
   geom_point(alpha = .25) +
@@ -340,9 +345,11 @@ ggplot(precinct_long_adusted, aes(x=week_median_date, y=`Arrests per capita`, co
 
 ```
 
-Some analysis of the differences between the per capita arrest rates
+Altough Brownsville shows much sharper trends than the Upper East Side, downward and then upward, the both the trends for both show as statistically significant with null hypothesis of no trend (the  Mann-Kendall test with sieve bootstrap Mann-Kendall test with sieve bootstrap, again.) 
 
-```{r}
+I now look at the trend in the weekly differences between these two areas.
+
+```{r, include=TRUE, echo=FALSE, warning=FALSE, message=FALSE}
 
 percapita_difference <- precinct_wide_adjusted %>%
   mutate(difference = `Brownsville per capita` -
@@ -362,11 +369,12 @@ ggplot(percapita_difference, aes(x=week_median_date, y=difference)) +
 
 ```
 
-As with my previous analysis, there are notable differences between the time period before mid 2020 and the period after mid 2020. I will separate the data as before and then look for both trends and for overall differences between the precincts. The analysis of the overall differences, such as whether the differences in weekly arrest rates, between the two precincts, is statistically significant is complicated by the fact that the observations for each week are not independent. Most statistical tests, including non-parametric tests, assume independence. I ameliorate this issue by using bootstrap methods---resampling data to be used in statistical tests. All of my analysis will use population-adjusted arrest rates and will focus on the differences between the two precincts.
+The again see statistically significant differences in the trends in the *differences*, both downward and upward.
 
-The trend analysis, again using sieve bootstrap.
+The analysis of the overall differences, such as whether the differences in weekly arrest rates, between the two precincts, is statistically significant is complicated by the fact that the observations for each week are not independent. Most statistical tests, including non-parametric tests, assume independence. I ameliorate this issue by using a simple bootstrap---resampling the data with replacement. We use, again, population-adjusted arest rates.
 
-```{r}
+
+```{r, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
 # analyze the earlier and later bits within R timeseries objects
 
 ts <- ts(percapita_difference$difference,
@@ -389,9 +397,7 @@ print(notrend_test(ts_late, B=1000, test='MK'))
 
 ```
 
-We now look at the overall difference in the per capita arrest rates between the precincts, examining whether the differences in the weekly means are statistically significant. 
-
-```{r}
+```{r, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
 
 early_differences <- percapita_difference[percapita_difference$week_median_date < ymd('2020-07-01'),]
 
@@ -414,6 +420,8 @@ boot.ci(bootmean_later, type = c('perc', 'bca'))
 
 
 ```
+
+To quantify the overall differences between Brownsville and the Upper East side, I use confidence intervals. With bootstrap, the confidence interval of the difference for the period 2018 through middle 2020, in percentabe points (for the numbers of arrests per capita), is (0.066,  0.073), while the confidence interval for the later period is (0.038,  0.044) 
 
 # Question 4
 
