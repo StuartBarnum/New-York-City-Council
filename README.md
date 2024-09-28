@@ -1,4 +1,4 @@
-# Excercises for the New York City Council
+# Request from the New York City Council
 
 Exploratory analysis:
 https://github.com/StuartBarnum/New-York-City-Council/blob/main/detailed_analysis.pdf
